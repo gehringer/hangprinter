@@ -175,6 +175,18 @@ float zprobe_zoffset;
 uint8_t active_extruder = 0;
 int fanSpeed = 0;
 
+//Hangprinter settings
+boolean buttonMode = false;
+float oldAcceleration = 1000;
+float deltaDstep = 0;
+const int maxSamples = 50;
+float samples[DIRS][maxSamples];
+int sampleCounter = 0;
+
+int buttonPinA = 47;
+int buttonPinB = 45;
+int buttonPinC = 32;
+
 float anchor_A_x = ANCHOR_A_X;
 float anchor_A_y = ANCHOR_A_Y;
 float anchor_A_z = ANCHOR_A_Z;
@@ -404,15 +416,59 @@ void setup(){
   setup_homepin();
 // Hangprinter needs it motors always enabled
 #if defined(HANGPRINTER)
-enable_x();
-enable_y();
-enable_z();
-enable_e1();
-calculate_delta(current_position, delta);
+  enable_x();
+  enable_y();
+  enable_z();
+  enable_e1();
+  pinMode(buttonPinA, INPUT_PULLUP);
+  pinMode(buttonPinB, INPUT_PULLUP);
+  pinMode(buttonPinC, INPUT_PULLUP);
+  calculate_delta(current_position, delta);
 #endif
 }
-
+//int counter= 0;
 void loop(){
+//	SERIAL_ECHO_START;
+	int bufferLength = block_buffer_head - block_buffer_tail;
+//	if(counter > 5000){
+//	SERIAL_ECHO("bufferLength: ");
+//	SERIAL_ECHOLN(bufferLength);
+//	counter = 0;
+//	}else{
+//		counter++;
+//	}
+
+	if(buttonMode && (bufferLength == 0)){
+		//check switches, create a block with a constant speed in direction given switch position
+
+
+		int buttonAPressed =  !digitalRead(buttonPinA);
+		int buttonBPressed =  !digitalRead(buttonPinB);
+		int buttonCPressed =  !digitalRead(buttonPinC);
+		float prev_delta[DIRS];
+		memcpy(prev_delta, delta, sizeof(delta));
+		float deltaLength = 0.1;
+		if(buttonAPressed){
+
+			delta[A_AXIS]+=deltaLength;
+		}else{
+			delta[A_AXIS]-=3*deltaLength;
+		}
+		if(buttonBPressed){
+			delta[B_AXIS]+=deltaLength;
+		}else{
+			delta[B_AXIS]-=3*deltaLength;
+		}
+		if(buttonCPressed){
+			delta[C_AXIS]+=deltaLength;
+		}else{
+			delta[C_AXIS]-=3*deltaLength;
+		}
+		delta[D_AXIS]-=deltaDstep;
+
+		plan_buffer_line(delta, prev_delta, destination[E_CARTH], 15*feedrate*feedmultiply/60/100.0, active_extruder, true);
+
+	}
   if(buflen < (BUFSIZE-1)) get_command();
 #ifdef SDSUPPORT
   card.checkautostart(false);
@@ -646,6 +702,64 @@ void process_commands(){
         plan_buffer_line(tmp_delta, delta,
                          destination[E_CARTH], feedrate*feedmultiply/60/100, active_extruder, false);
         break;
+      case 33: // G33 Set in "button-mode"
+    	  buttonMode=true;
+    	  if(code_seen('D')){
+    		  deltaDstep = code_value();
+    	  }else{
+    		  deltaDstep = 0;
+    	  }
+    	  oldAcceleration = acceleration;
+    	  acceleration = 3000;
+    	  SERIAL_ECHO("buttonMode: ");
+    	  SERIAL_ECHOLN(buttonMode);
+        break;
+      case 34: // G34 Get out of "button-mode"
+          buttonMode=false;
+          acceleration = oldAcceleration;
+          //tension lines a little bit after buttonMode
+          float prev_delta[DIRS];
+          		memcpy(prev_delta, delta, sizeof(delta));
+          		delta[A_AXIS]-=3;
+          		delta[B_AXIS]-=3;
+          		delta[C_AXIS]-=3;
+          		plan_buffer_line(delta, prev_delta, destination[E_CARTH], feedrate*feedmultiply/60/100.0, active_extruder, true);
+
+          SERIAL_ECHO("buttonMode: ");
+          SERIAL_ECHOLN(buttonMode);
+        break;
+      case 35: // G35 sample position
+    	  if(sampleCounter < maxSamples){
+    	  for(int i = 0; i < DIRS; i++){
+    		  samples[i][sampleCounter] = delta[i];
+    	  }
+    	  sampleCounter++;
+    	  }
+    	  SERIAL_ECHO("lineLengths sampled, number of samples: ");
+    	  SERIAL_ECHOLN(sampleCounter);
+    	  break;
+      case 36: // G36 printout samples
+    	  SERIAL_ECHO("lineLengths = 0.001*[ ");
+    	  while(sampleCounter > 0){
+    		  sampleCounter--;
+    		  for(int i = 0; i < DIRS; i++){
+    			  SERIAL_ECHO(samples[i][sampleCounter]);
+    			  if(i != DIRS-1){
+    				  SERIAL_ECHO(", ");
+    			  }
+    		  }
+    		  if(sampleCounter == 0){
+    			  SERIAL_ECHOLN("];");
+    		  }else{
+    			  SERIAL_ECHOLN(";");
+    			  SERIAL_ECHO("                      ");
+    		  }
+    	  }
+
+
+    	  SERIAL_ECHO("lineLengths sampled, number of samples: ");
+    	  SERIAL_ECHOLN(sampleCounter);
+    	  break;
       case 90: // G90
         relative_mode = false;
         break;

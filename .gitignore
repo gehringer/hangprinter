@@ -8,3 +8,8 @@ drive_attic.scad
 fairlead_attic.scad
 firmware/Marlin/Marlin/octave-workspace
 DRAWING-V6-175-SINK.png
+*.d
+firmware/Marlin/Marlin/Release/
+firmware/Marlin/Marlin/.settings/
+firmware/Marlin/Marlin/.cproject
+firmware/Marlin/Marlin/.project
