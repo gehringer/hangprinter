@@ -95,17 +95,17 @@
 // Or do other measurments and calculate Carthesian axis lengths by trigonometry
 // See Hangprinter calibration manual for help:
 // https://vitana.se/opr3d/tbear/index.html#hangprinter_project_21
-#define ANCHOR_A_X -573.0 // anchor point A's Carthesian x-coordinate. In mm
-#define ANCHOR_A_Y -1331.0
-#define ANCHOR_A_Z -162.5
-#define ANCHOR_B_X 1548.0
-#define ANCHOR_B_Y 0.0
-#define ANCHOR_B_Z -148.0
-#define ANCHOR_C_X -609.0
-#define ANCHOR_C_Y 1209.0
-#define ANCHOR_C_Z -133.5
+#define ANCHOR_A_X -1460.0 // anchor point A's Carthesian x-coordinate. In mm
+#define ANCHOR_A_Y 861.0
+#define ANCHOR_A_Z -140.0
+#define ANCHOR_B_X 0.0
+#define ANCHOR_B_Y -1700.0
+#define ANCHOR_B_Z -110.0
+#define ANCHOR_C_X 1460.0
+#define ANCHOR_C_Y 861.0
+#define ANCHOR_C_Z -120.0
 // It's assumed that ceiling frame part is directly above origo
-#define ANCHOR_D_Z 2295.0 // measured along vertical line, from fish eye to anchor point.
+#define ANCHOR_D_Z 3800.0 // measured along vertical line, from fish eye to anchor point.
 
 //===========================================================================
 //============================= Thermal Settings ============================
@@ -307,7 +307,7 @@
 
 // Parameters for all extruder heaters
 #define THERMAL_RUNAWAY_PROTECTION_PERIOD 180 //in seconds
-#define THERMAL_RUNAWAY_PROTECTION_HYSTERESIS 4 // in degree Celsius
+#define THERMAL_RUNAWAY_PROTECTION_HYSTERESIS 10 // in degree Celsius
 
 // If you want to enable this feature for your bed heater,
 // uncomment the 2 defines below:
@@ -420,7 +420,7 @@ const bool Z_MAX_ENDSTOP_INVERTING = true; // set to true to invert the logic of
 // For deltabots this means top and center of the Cartesian print volume.
 #define MANUAL_X_HOME_POS 0
 #define MANUAL_Y_HOME_POS 0
-#define MANUAL_Z_HOME_POS 0.2 // For delta: Distance between nozzle and print surface after homing.
+#define MANUAL_Z_HOME_POS 0 // For delta: Distance between nozzle and print surface after homing.
 
 #define NUM_AXIS 5 // The axis order in all axis related arrays is A, B, C, D, E
 #define DIRS 4     // (that is A_AXIS, B_AXIS, C_AXIS, D_AXIS, E_AXIS or 0, 1, 2, 3, 4)
@@ -439,9 +439,9 @@ const bool Z_MAX_ENDSTOP_INVERTING = true; // set to true to invert the logic of
 
 // Mechanical advantage in each direction needed for dynamic step/mm calculations
 // One pulley along each line gives halved forces and doubled distances
-#define MECHANICAL_ADVANTAGE_A 1
-#define MECHANICAL_ADVANTAGE_B 1
-#define MECHANICAL_ADVANTAGE_C 1
+#define MECHANICAL_ADVANTAGE_A 2
+#define MECHANICAL_ADVANTAGE_B 2
+#define MECHANICAL_ADVANTAGE_C 2
 #define MECHANICAL_ADVANTAGE_D 2
 
 // Action points in each direction needed for dynamic step/mm calculations
@@ -453,11 +453,11 @@ const bool Z_MAX_ENDSTOP_INVERTING = true; // set to true to invert the logic of
 // This comes from spool height and line diameter.
 // diameter 0.39, spool height 4.6 and approximating volume taken by line on spool to have quadratic cross section gives
 // 0.39*0.39/(pi*4.6) = 0.010525
-#define DEFAULT_SPOOL_BUILDUP_FACTOR 0.010525
+#define DEFAULT_SPOOL_BUILDUP_FACTOR 0.002
 
 // Measure the total length of lines on each spool when printer is in origo
 // Two A-lines, each of length 150.0 gives total length 300.0
-const float LINE_ON_SPOOL_ORIGO[DIRS] = {7240.0,6260.0,6900.0,18000.0};
+const float LINE_ON_SPOOL_ORIGO[DIRS] = {6000.0,6000.0,6000.0,12000.0};
 //const float LINE_ON_SPOOL_ORIGO[DIRS] = {2460.0,2600.0,2800.0,3000.0};
 //const float LINE_ON_SPOOL_ORIGO[DIRS] = {0.0,0.0,0.0,0.0};
 
@@ -472,18 +472,20 @@ const float LINE_ON_SPOOL_ORIGO[DIRS] = {7240.0,6260.0,6900.0,18000.0};
 // D-motor has 1 tooth instead of 9 teeth. 1216.651*9 = 10949.860
 //const float STEPS_PER_SPOOL_RADIAN[DIRS] = {1216.651,1216.651,1216.651,10949.860};
 // Double all of those if 1/16 stepping is used
-const float STEPS_PER_SPOOL_RADIAN[DIRS] = {2433.302,2433.302,2433.302,21899.720};
+//const float STEPS_PER_SPOOL_RADIAN[DIRS] = {2433.302,2433.302,2433.302,21899.720};
+// Quadruple if 1/32 stepping is used
+const float STEPS_PER_SPOOL_RADIAN[DIRS] = {4866.604,4866.604,4866.604,21899.720};
 
 // If EXPERIMENTAL_LINE_BUILDUP_COMPENSATION_FEATURE is enabled
 // then constant ABCD values are calculated on the fly and used only used to calculate accelerations
 #if defined(EXPERIMENTAL_LINE_BUILDUP_COMPENSATION_FEATURE)
-#define DEFAULT_AXIS_STEPS_PER_UNIT   {0, 0, 0, 0, 134.0}
+#define DEFAULT_AXIS_STEPS_PER_UNIT   {0, 0, 0, 0, 92.0}
 #else
-#define DEFAULT_AXIS_STEPS_PER_UNIT   {36.87, 36.87, 36.87, 663.7, 134.0}  // steps per unit with no line on spools for Hangprinter
+#define DEFAULT_AXIS_STEPS_PER_UNIT   {36.87, 36.87, 36.87, 663.7, 92.0}  // steps per unit with no line on spools for Hangprinter
 #endif
 
-#define DEFAULT_MAX_FEEDRATE          {300, 300, 300, 20, 25}    // (mm/sec)
-#define DEFAULT_MAX_ACCELERATION      {2000,2000,2000,2000,10000}    // X, Y, Z, E maximum start speed for accelerated moves.
+#define DEFAULT_MAX_FEEDRATE          {300, 300, 300, 15, 25}    // (mm/sec)
+#define DEFAULT_MAX_ACCELERATION      {2000,2000,2000,200,10000}    // X, Y, Z, E maximum start speed for accelerated moves.
 
 #define DEFAULT_ACCELERATION          1000    // X, Y, Z and E max acceleration in mm/s^2 for printing moves
 #define DEFAULT_RETRACT_ACCELERATION  3000   // X, Y, Z and E max acceleration in mm/s^2 for retracts
