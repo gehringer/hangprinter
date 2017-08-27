@@ -176,6 +176,12 @@ float add_homing[DIRS] = { 0 };
 float endstop_adj[DIRS] = { 0 };
 #endif
 
+#if defined(FSR)
+bool tight_mode[4] = { false, false, false, false};
+float minimum_tight[4] = { min_tight[A_AXIS], min_tight[B_AXIS], min_tight[C_AXIS], min_tight[D_AXIS] };
+float maximum_tight[4] = { max_tight[A_AXIS], max_tight[B_AXIS], max_tight[C_AXIS], max_tight[D_AXIS] };
+float tight_mode_increment = tight_mode_incr;
+#endif
 float min_pos[DIRS] = { A_MIN_POS, B_MIN_POS, C_MIN_POS, D_MIN_POS };
 float max_pos[DIRS] = { A_MAX_POS, B_MAX_POS, C_MAX_POS, D_MAX_POS };
 bool axis_known_position[DIRS] = { false, false, false, false };
@@ -183,6 +189,7 @@ float zprobe_zoffset;
 
 uint8_t active_extruder = 0;
 int fanSpeed = 0;
+
 
 float anchor_A_x = ANCHOR_A_X;
 float anchor_A_y = ANCHOR_A_Y;
@@ -417,15 +424,46 @@ void setup(){
   setup_homepin();
 // Hangprinter needs it motors always enabled
 #if defined(HANGPRINTER)
-enable_x();
-enable_y();
-enable_z();
-enable_e1();
-calculate_delta(current_position, delta);
+  enable_x();
+  enable_y();
+  enable_z();
+  enable_e1();
+  calculate_delta(current_position, delta);
+#if defined(FSR)
+  pinMode(fsr_pin[A_AXIS], INPUT);
+  pinMode(fsr_pin[B_AXIS], INPUT);
+  pinMode(fsr_pin[C_AXIS], INPUT);
+  pinMode(fsr_pin[D_AXIS], INPUT);
+#endif
 #endif
 }
 
 void loop(){
+  // Tight mode goes on right here...
+  int bufferLength = block_buffer_head - block_buffer_tail;
+  if((tight_mode[A_AXIS] || tight_mode[B_AXIS] || tight_mode[C_AXIS] || tight_mode[D_AXIS]) && (bufferLength == 0)){
+    float prev_delta[NUM_AXIS];
+    memcpy(prev_delta, delta, sizeof(delta));
+    float tightness;
+    bool delta_changed = false;
+
+    for(int i=0; i<4; i++){
+      if(tight_mode[i]){
+        tightness = analogRead(fsr_pin[i]);
+        if(tightness > minimum_tight[i]){ // line not tight...
+          delta[i] -= tight_mode_increment;
+          delta_changed = true;
+        } else if(tightness < maximum_tight[i]){ // line too tight
+          delta[i] += tight_mode_increment;
+          delta_changed = true;
+        }
+      }
+    }
+    if(delta_changed){
+      plan_buffer_line(delta, prev_delta, destination[E_CARTH], feedrate*feedmultiply/60/100, active_extruder, true);
+    }
+  }
+
   if(buflen < (BUFSIZE-1)) get_command();
 #ifdef SDSUPPORT
   card.checkautostart(false);
@@ -836,134 +874,37 @@ void process_commands(){
         }
         break;
 #if defined(EXPERIMENTAL_AUTO_CALIBRATION_FEATURE)
-      case 95: // G95 Set servo torque mode status. Accepts 0 or 1.
-        float torque;
-        byte cmd[5];
-        cmd[0] = 0x5f; // 95 in hexadecimal is 0x5f
-        if(code_seen('A')){
-          torque = code_value();
-          if(!INVERT_X_DIR){
-            torque = -torque;
+      case 95: // G95 Set axis tight mode status. Warning: This may get carthesian and delta positions out of sync.
+        float requested_tightness;
+        for(int i=0; i<4; i++){
+          if(code_seen(axis_codes[i])){
+            requested_tightness = code_value();
+            if(requested_tightness < minimum_tight[i] // Tighter than minimum tightness
+                && requested_tightness > maximum_tight[i]){ // Less tight than maximum tightness
+              tight_mode[i] = true;
+            } else {
+              tight_mode[i] = false;
+            }
           }
-          memcpy(cmd+1, &torque, 4);
-          Wire.beginTransmission(0x0a);
-          Wire.write(cmd, 5);
-          Wire.endTransmission(0x0a);
         }
-        if(code_seen('B')){
-          torque = code_value();
-          if(!INVERT_Y_DIR){
-            torque = -torque;
+        if(code_seen('F')){ // G95 tightening speed is adjustable...
+          next_feedrate = code_value();
+          if(next_feedrate > 0.0){
+            saved_feedrate = feedrate;
+            feedrate = next_feedrate;
           }
-          memcpy(cmd+1, &torque, 4);
-          Wire.beginTransmission(0x0b);
-          Wire.write(cmd, 5);
-          Wire.endTransmission(0x0b);
-        }
-        if(code_seen('C')){
-          torque = code_value();
-          if(!INVERT_Z_DIR){
-            torque = -torque;
-          }
-          memcpy(cmd+1, &torque, 4);
-          Wire.beginTransmission(0x0c);
-          Wire.write(cmd, 5);
-          Wire.endTransmission(0x0c);
-        }
-        if(code_seen('D')){
-          torque = code_value();
-          if(!INVERT_E1_DIR){
-            torque = -torque;
-          }
-          memcpy(cmd+1, &torque, 4);
-          Wire.beginTransmission(0x0d);
-          Wire.write(cmd, 5);
-          Wire.endTransmission(0x0d);
         }
         break;
-      case 96: // G96 Tell sensor servo to mark its reference point
-        if(code_seen('A')){
-          Wire.beginTransmission(0x0a);
-          Wire.write(0x60); // 96 in hexadecimal is 0x60
-          Wire.endTransmission(0x0a);
-        }
-        if(code_seen('B')){
-          Wire.beginTransmission(0x0b);
-          Wire.write(0x60);
-          Wire.endTransmission(0x0b);
-        }
-        if(code_seen('C')){
-          Wire.beginTransmission(0x0c);
-          Wire.write(0x60);
-          Wire.endTransmission(0x0c);
-        }
-        if(code_seen('D')){
-          Wire.beginTransmission(0x0d);
-          Wire.write(0x60);
-          Wire.endTransmission(0x0d);
-        }
-        break;
-      case 97: // G97 Get sensor servo length travelled since last G96
-        if(code_seen('A')){
-          union {
-                  byte b[4]; // hard coded 4 instead of sizeof(float)
-                  float fval;
-                } ang_a;
-          Wire.requestFrom(0x0a, 4);
-          int i = 0;
-          while(Wire.available()){
-            ang_a.b[i] = Wire.read();
-            i++;
-          }
-          SERIAL_ECHO("A: ");
-          SERIAL_ECHO(ang_to_mm_A(ang_a.fval));
-          SERIAL_ECHO(" ");
-        }
-        if(code_seen('B')){
-          union {
-                  byte b[4]; // hard coded 4 instead of sizeof(float)
-                  float fval;
-                } ang_b;
-          Wire.requestFrom(0x0b, 4);
-          int i = 0;
-          while(Wire.available()){
-            ang_b.b[i] = Wire.read();
-            i++;
-          }
-          SERIAL_ECHO("B: ");
-          SERIAL_ECHO(ang_to_mm_B(ang_b.fval));
-          SERIAL_ECHO(" ");
-        }
-        if(code_seen('C')){
-          union {
-                  byte b[4]; // hard coded 4 instead of sizeof(float)
-                  float fval;
-                } ang_c;
-          Wire.requestFrom(0x0c, 4);
-          int i = 0;
-          while(Wire.available()){
-            ang_c.b[i] = Wire.read();
-            i++;
-          }
-          SERIAL_ECHO("C: ");
-          SERIAL_ECHO(ang_to_mm_C(ang_c.fval));
-          SERIAL_ECHO(" ");
-        }
-        if(code_seen('D')){
-          union {
-                  byte b[4]; // hard coded 4 instead of sizeof(float)
-                  float fval;
-                } ang_d;
-          Wire.requestFrom(0x0d, 4);
-          int i = 0;
-          while(Wire.available()){
-            ang_d.b[i] = Wire.read();
-            i++;
-          }
-          SERIAL_ECHO("D: ");
-          SERIAL_ECHO(ang_to_mm_D(ang_d.fval));
-        }
-        SERIAL_ECHO("\n");
+      case 97: // G97 Get line length diffs compared to origo, as [A, B, C, D]
+        SERIAL_ECHO("[");
+        SERIAL_ECHO(delta[A_AXIS] - INITIAL_DISTANCES[A_AXIS]);
+        SERIAL_ECHO(", ");
+        SERIAL_ECHO(delta[B_AXIS] - INITIAL_DISTANCES[B_AXIS]);
+        SERIAL_ECHO(", ");
+        SERIAL_ECHO(delta[C_AXIS] - INITIAL_DISTANCES[C_AXIS]);
+        SERIAL_ECHO(", ");
+        SERIAL_ECHO(delta[D_AXIS] - INITIAL_DISTANCES[D_AXIS]);
+        SERIAL_ECHO("]\n");
         break;
 #endif // end of EXPERIMENTAL_AUTO_CALIBRATION_FEATURE code
     }
@@ -1366,6 +1307,25 @@ void process_commands(){
           calculate_delta(current_position, delta);
           plan_set_position(delta, destination[E_CARTH]);
           break;
+          case 95: // M95 Set tight mode increment
+            if(code_seen('S')){
+              tight_mode_increment = fabs(code_value()); // Really need this to be positive
+            }
+            break;
+          case 96: // M96 Set FSR minimum tightness
+            for(int i=0; i<4; i++){
+              if(code_seen(axis_codes[i])){
+                minimum_tight[i] = code_value();
+              }
+            }
+            break;
+          case 97: // M97 Set FSR maximum tightness
+            for(int i=0; i<4; i++){
+              if(code_seen(axis_codes[i])){
+                maximum_tight[i] = code_value();
+              }
+            }
+            break;
           case 114: // M114
           SERIAL_ECHOLN("Current position in Carthesian system:");
           SERIAL_PROTOCOLPGM("X:");

@@ -178,6 +178,11 @@ void ClearToSend();
 void get_coordinates();
 void calculate_delta(float cartesian[3], float delta[4]);
 extern float delta[DIRS];
+#if defined(FSR)
+extern float minimum_tight[4];
+extern float maximum_tight[4];
+extern float tight_mode_increment;
+#endif
 void prepare_move();
 void kill();
 void Stop();

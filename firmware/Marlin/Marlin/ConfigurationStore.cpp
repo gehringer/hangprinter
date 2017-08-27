@@ -272,17 +272,41 @@ void Config_PrintSettings(bool forReplay) {
   SERIAL_ECHO_START;
 
   if (!forReplay) {
+#if defined(EXPERIMENTAL_LINE_BUILDUP_COMPENSATION_FEATURE)
+    SERIAL_ECHOLNPGM("Spool buildup factor:");
+#else
     SERIAL_ECHOLNPGM("Steps per unit:");
+#endif
     SERIAL_ECHO_START;
   }
+#if defined(EXPERIMENTAL_LINE_BUILDUP_COMPENSATION_FEATURE)
+  SERIAL_ECHOPAIR("  M92 S", spool_buildup_factor);
+#else
   SERIAL_ECHOPAIR("  M92 A", axis_steps_per_unit[A_AXIS]);
   SERIAL_ECHOPAIR(" B", axis_steps_per_unit[B_AXIS]);
   SERIAL_ECHOPAIR(" C", axis_steps_per_unit[C_AXIS]);
   SERIAL_ECHOPAIR(" D", axis_steps_per_unit[D_AXIS]);
+#endif
 #ifdef EXTRUDERS
   SERIAL_ECHOPAIR(" E", axis_steps_per_unit[E_AXIS]);
 #endif // ifdef EXTRUDERS
   SERIAL_EOL;
+
+#if defined(FSR)
+  SERIAL_ECHO_START;
+  SERIAL_ECHOPAIR("  M95 S", tight_mode_increment);
+  SERIAL_EOL;
+  SERIAL_ECHOPAIR("  M96 A", minimum_tight[A_AXIS]);
+  SERIAL_ECHOPAIR(" B", minimum_tight[B_AXIS]);
+  SERIAL_ECHOPAIR(" C", minimum_tight[C_AXIS]);
+  SERIAL_ECHOPAIR(" D", minimum_tight[D_AXIS]);
+  SERIAL_EOL;
+  SERIAL_ECHOPAIR("  M97 A", maximum_tight[A_AXIS]);
+  SERIAL_ECHOPAIR(" B", maximum_tight[B_AXIS]);
+  SERIAL_ECHOPAIR(" C", maximum_tight[C_AXIS]);
+  SERIAL_ECHOPAIR(" D", maximum_tight[D_AXIS]);
+  SERIAL_EOL;
+#endif
 
   SERIAL_ECHO_START;
 

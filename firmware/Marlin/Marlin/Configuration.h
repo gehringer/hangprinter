@@ -440,6 +440,20 @@ const bool Z_MAX_ENDSTOP_INVERTING = true; // set to true to invert the logic of
 // If you want the experimental auto calibration feature with your Hangprinter, uncomment this.
 #define EXPERIMENTAL_AUTO_CALIBRATION_FEATURE
 
+// If you have FSRs mounted on your Hangprinter, uncomment this
+#define FSR
+#if defined(FSR)
+const float min_tight[4] = {1000.0, 1000.0, 1000.0, 1000.0};
+const float max_tight[4] = {800.0, 800.0, 800.0, 800.0};
+const float tight_mode_incr = 0.1; // number of mm to take in/let out if line is too slack/to tight
+// Analog numbering.
+// 14 is labeled T1 on RAMPS silkscreen.
+// 15 is labeled T2 on RAMPS silkscreen.
+// 3: Bottom row of AUX-1 is [5v, GND, A3, A4]. Place FSR for C in middle of AUX-1 bottom row.
+// 9 is top, secondmost left on AUX-2 on RAMPS. Leftmost is GND.
+const int fsr_pin[4] = {14, 15, 3, 9};
+#endif
+
 // Mechanical advantage in each direction needed for dynamic step/mm calculations
 // One pulley along each line gives halved forces and doubled distances
 #define MECHANICAL_ADVANTAGE_A 1
