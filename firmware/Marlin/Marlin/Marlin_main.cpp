@@ -895,17 +895,6 @@ void process_commands(){
           }
         }
         break;
-      case 97: // G97 Get line length diffs compared to origo, as [A, B, C, D]
-        SERIAL_ECHO("[");
-        SERIAL_ECHO(delta[A_AXIS] - INITIAL_DISTANCES[A_AXIS]);
-        SERIAL_ECHO(", ");
-        SERIAL_ECHO(delta[B_AXIS] - INITIAL_DISTANCES[B_AXIS]);
-        SERIAL_ECHO(", ");
-        SERIAL_ECHO(delta[C_AXIS] - INITIAL_DISTANCES[C_AXIS]);
-        SERIAL_ECHO(", ");
-        SERIAL_ECHO(delta[D_AXIS] - INITIAL_DISTANCES[D_AXIS]);
-        SERIAL_ECHO("]\n");
-        break;
 #endif // end of EXPERIMENTAL_AUTO_CALIBRATION_FEATURE code
     }
   }
@@ -1327,37 +1316,49 @@ void process_commands(){
             }
             break;
           case 114: // M114
-          SERIAL_ECHOLN("Current position in Carthesian system:");
-          SERIAL_PROTOCOLPGM("X:");
-          SERIAL_PROTOCOL(current_position[X_AXIS]);
-          SERIAL_PROTOCOLPGM(" Y:");
-          SERIAL_PROTOCOL(current_position[Y_AXIS]);
-          SERIAL_PROTOCOLPGM(" Z:");
-          SERIAL_PROTOCOL(current_position[Z_AXIS]);
-          SERIAL_PROTOCOLPGM(" E:");
-          SERIAL_PROTOCOL(current_position[E_CARTH]);
+            if(code_seen('H')){
+              SERIAL_ECHO("[");
+              SERIAL_ECHO(delta[A_AXIS] - INITIAL_DISTANCES[A_AXIS]);
+              SERIAL_ECHO(", ");
+              SERIAL_ECHO(delta[B_AXIS] - INITIAL_DISTANCES[B_AXIS]);
+              SERIAL_ECHO(", ");
+              SERIAL_ECHO(delta[C_AXIS] - INITIAL_DISTANCES[C_AXIS]);
+              SERIAL_ECHO(", ");
+              SERIAL_ECHO(delta[D_AXIS] - INITIAL_DISTANCES[D_AXIS]);
+              SERIAL_ECHO("]\n");
+            } else {
+              SERIAL_ECHOLN("Current position in Carthesian system:");
+              SERIAL_PROTOCOLPGM("X:");
+              SERIAL_PROTOCOL(current_position[X_AXIS]);
+              SERIAL_PROTOCOLPGM(" Y:");
+              SERIAL_PROTOCOL(current_position[Y_AXIS]);
+              SERIAL_PROTOCOLPGM(" Z:");
+              SERIAL_PROTOCOL(current_position[Z_AXIS]);
+              SERIAL_PROTOCOLPGM(" E:");
+              SERIAL_PROTOCOL(current_position[E_CARTH]);
 
-          SERIAL_PROTOCOLPGM("\nStep count along each motor abcd-axis:\nA:");
-          SERIAL_PROTOCOLPGM(" A:");
-          SERIAL_PROTOCOL(st_get_position(A_AXIS));
-          SERIAL_PROTOCOLPGM(" B:");
-          SERIAL_PROTOCOL(st_get_position(B_AXIS));
-          SERIAL_PROTOCOLPGM(" C:");
-          SERIAL_PROTOCOL(st_get_position(C_AXIS));
-          SERIAL_PROTOCOLPGM(" D:");
-          SERIAL_PROTOCOL(st_get_position(D_AXIS));
+              SERIAL_PROTOCOLPGM("\nStep count along each motor abcd-axis:\nA:");
+              SERIAL_PROTOCOLPGM(" A:");
+              SERIAL_PROTOCOL(st_get_position(A_AXIS));
+              SERIAL_PROTOCOLPGM(" B:");
+              SERIAL_PROTOCOL(st_get_position(B_AXIS));
+              SERIAL_PROTOCOLPGM(" C:");
+              SERIAL_PROTOCOL(st_get_position(C_AXIS));
+              SERIAL_PROTOCOLPGM(" D:");
+              SERIAL_PROTOCOL(st_get_position(D_AXIS));
 
-          SERIAL_PROTOCOLPGM("\n Absolute line lengths:\n");
-          SERIAL_PROTOCOLPGM(" A:");
-          SERIAL_PROTOCOL(delta[A_AXIS]);
-          SERIAL_PROTOCOLPGM(" B:");
-          SERIAL_PROTOCOL(delta[B_AXIS]);
-          SERIAL_PROTOCOLPGM(" C:");
-          SERIAL_PROTOCOL(delta[C_AXIS]);
-          SERIAL_PROTOCOLPGM(" D:");
-          SERIAL_PROTOCOL(delta[D_AXIS]);
+              SERIAL_PROTOCOLPGM("\n Absolute line lengths:\n");
+              SERIAL_PROTOCOLPGM(" A:");
+              SERIAL_PROTOCOL(delta[A_AXIS]);
+              SERIAL_PROTOCOLPGM(" B:");
+              SERIAL_PROTOCOL(delta[B_AXIS]);
+              SERIAL_PROTOCOLPGM(" C:");
+              SERIAL_PROTOCOL(delta[C_AXIS]);
+              SERIAL_PROTOCOLPGM(" D:");
+              SERIAL_PROTOCOL(delta[D_AXIS]);
 
-          SERIAL_PROTOCOLLN("");
+              SERIAL_PROTOCOLLN("");
+            }
           break;
           case 120: // M120
           enable_endstops(false) ;
