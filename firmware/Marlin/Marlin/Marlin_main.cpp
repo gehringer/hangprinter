@@ -438,6 +438,10 @@ void setup(){
 #endif
 }
 
+float read_fsr(int abcd){
+  return analogRead(fsr_pin[abcd]);
+}
+
 void loop(){
   // Tight mode goes on right here...
   int bufferLength = block_buffer_head - block_buffer_tail;
@@ -449,7 +453,7 @@ void loop(){
 
     for(int i=0; i<4; i++){
       if(tight_mode[i]){
-        tightness = analogRead(fsr_pin[i]);
+        tightness = read_fsr(i);
         if(tightness > minimum_tight[i]){ // line not tight...
           delta[i] -= tight_mode_increment;
           delta_changed = true;
@@ -1267,35 +1271,31 @@ void process_commands(){
 
           case 92: // M92
 #if defined(HANGPRINTER) && defined(EXPERIMENTAL_LINE_BUILDUP_COMPENSATION_FEATURE)
-          if(code_seen('S')){
-            spool_buildup_factor = code_value();
-          }
+            if(code_seen('S')){
+              spool_buildup_factor = code_value();
+            }
 #else
-          for(int8_t i=0; i < NUM_AXIS; i++){
-            if(code_seen(axis_codes[i])){
-              if(i == E_AXIS){ // E
-                float value = code_value();
-                if(value < 20.0){
-                  float factor = axis_steps_per_unit[i] / value; // increase e constants if M92 E14 is given for netfab.
-                  max_e_jerk *= factor;
-                  max_feedrate[i] *= factor;
-                  axis_steps_per_sqr_second[i] *= factor;
+            for(int8_t i=0; i < NUM_AXIS; i++){
+              if(code_seen(axis_codes[i])){
+                if(i == E_AXIS){ // E
+                  float value = code_value();
+                  if(value < 20.0){
+                    float factor = axis_steps_per_unit[i] / value; // increase e constants if M92 E14 is given for netfab.
+                    max_e_jerk *= factor;
+                    max_feedrate[i] *= factor;
+                    axis_steps_per_sqr_second[i] *= factor;
+                  }
+                  axis_steps_per_unit[i] = value;
+                }else {
+                  axis_steps_per_unit[i] = code_value();
                 }
-                axis_steps_per_unit[i] = value;
-              }else {
-                axis_steps_per_unit[i] = code_value();
-                //SERIAL_ECHO("Axis nr ");
-                //SERIAL_ECHO(i);
-                //SERIAL_ECHO(" got steps per unit: ");
-                //SERIAL_ECHOLN(axis_steps_per_unit[i]);
               }
             }
-          }
 #endif // HANGPRINTER && EXPERIMENTAL_LINE_BUILDUP_COMPENSATION_FEATURE
-          // Update step-count, keep old carth-position
-          calculate_delta(current_position, delta);
-          plan_set_position(delta, destination[E_CARTH]);
-          break;
+            // Update step-count, keep old carth-position
+            calculate_delta(current_position, delta);
+            plan_set_position(delta, destination[E_CARTH]);
+            break;
           case 95: // M95 Set tight mode increment
             if(code_seen('S')){
               tight_mode_increment = fabs(code_value()); // Really need this to be positive
@@ -1316,7 +1316,16 @@ void process_commands(){
             }
             break;
           case 114: // M114
-            if(code_seen('H')){
+            if(code_seen('T')){
+              SERIAL_ECHO("Tightness A: ");
+              SERIAL_ECHOLN(read_fsr(A_AXIS));
+              SERIAL_ECHO("Tightness B: ");
+              SERIAL_ECHOLN(read_fsr(B_AXIS));
+              SERIAL_ECHO("Tightness C: ");
+              SERIAL_ECHOLN(read_fsr(C_AXIS));
+              SERIAL_ECHO("Tightness D: ");
+              SERIAL_ECHOLN(read_fsr(D_AXIS));
+            } else if(code_seen('H')){
               SERIAL_ECHO("[");
               SERIAL_ECHO(delta[A_AXIS] - INITIAL_DISTANCES[A_AXIS]);
               SERIAL_ECHO(", ");
