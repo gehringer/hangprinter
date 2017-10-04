@@ -448,17 +448,21 @@ void loop(){
   if((tight_mode[A_AXIS] || tight_mode[B_AXIS] || tight_mode[C_AXIS] || tight_mode[D_AXIS]) && (bufferLength == 0)){
     float prev_delta[NUM_AXIS];
     memcpy(prev_delta, delta, sizeof(delta));
-    float tightness;
+    float tightness0, tightness1, tightness;
     bool delta_changed = false;
 
     for(int i=0; i<4; i++){
       if(tight_mode[i]){
-        tightness = read_fsr(i);
+        tightness0 = read_fsr(i);
+        tightness1 = read_fsr(i);
+        tightness = (tightness0 + tightness1)/2.0;
         if(tightness > minimum_tight[i]){ // line not tight...
-          delta[i] -= tight_mode_increment;
+          //delta[i] -= tight_mode_increment;
+          delta[i] -= (tightness - minimum_tight[i])*0.015;
           delta_changed = true;
         } else if(tightness < maximum_tight[i]){ // line too tight
-          delta[i] += tight_mode_increment;
+          //delta[i] += tight_mode_increment;
+          delta[i] += (maximum_tight[i] - tightness)*0.015;
           delta_changed = true;
         }
       }
@@ -878,16 +882,14 @@ void process_commands(){
         }
         break;
 #if defined(EXPERIMENTAL_AUTO_CALIBRATION_FEATURE)
-      case 95: // G95 Set axis tight mode status. Warning: This may get carthesian and delta positions out of sync.
+      case 95: // G95 Toggle axis tight mode. Warning: This may get carthesian and delta positions out of sync.
         float requested_tightness;
         for(int i=0; i<4; i++){
           if(code_seen(axis_codes[i])){
-            requested_tightness = code_value();
-            if(requested_tightness < minimum_tight[i] // Tighter than minimum tightness
-                && requested_tightness > maximum_tight[i]){ // Less tight than maximum tightness
-              tight_mode[i] = true;
-            } else {
+            if(tight_mode[i]){ // Less tight than maximum tightness
               tight_mode[i] = false;
+            } else {
+              tight_mode[i] = true;
             }
           }
         }
