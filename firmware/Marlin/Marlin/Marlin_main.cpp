@@ -906,11 +906,13 @@ void process_commands(){
         }
         break;
 #if defined(EXPERIMENTAL_AUTO_CALIBRATION_FEATURE)
-      case 95: // G95 Toggle axis tight mode. Warning: This may get carthesian and delta positions out of sync.
-        float requested_tightness;
+      // Warning: This may get carthesian and delta positions out of sync.
+      // G95 C0 ; turn off tight mode on c axis
+      // G95 C1 ; turn on tight mode on c axis
+      case 95: // G95 Toggle axis tight mode
         for(int i=0; i<4; i++){
           if(code_seen(axis_codes[i])){
-            if(tight_mode[i]){ // Less tight than maximum tightness
+            if(code_value_long() == 0){
               tight_mode[i] = false;
             } else {
               tight_mode[i] = true;
