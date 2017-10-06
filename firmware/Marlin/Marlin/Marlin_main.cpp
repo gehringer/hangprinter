@@ -442,10 +442,28 @@ float read_fsr(int abcd){
   return analogRead(fsr_pin[abcd]);
 }
 
+bool tight(){
+  float readings01[DIRS][2];
+  float mean_readings[DIRS];
+  for(int i = 0; i < DIRS; i++){
+    readings01[i][0] = read_fsr(i);
+    readings01[i][1] = read_fsr(i);
+    mean_readings[i] = (readings01[i][0] + readings01[i][1])/2.0;
+    if(mean_readings[i] > minimum_tight[i] || mean_readings[i] < maximum_tight[i]){
+      return false;
+    }
+  }
+  return true;
+}
+
+bool in_tight_mode(){
+  return tight_mode[A_AXIS] || tight_mode[B_AXIS] || tight_mode[C_AXIS] || tight_mode[D_AXIS];
+}
+
 void loop(){
   // Tight mode goes on right here...
   int bufferLength = block_buffer_head - block_buffer_tail;
-  if((tight_mode[A_AXIS] || tight_mode[B_AXIS] || tight_mode[C_AXIS] || tight_mode[D_AXIS]) && (bufferLength == 0)){
+  if(in_tight_mode() && (bufferLength == 0)){
     float prev_delta[NUM_AXIS];
     memcpy(prev_delta, delta, sizeof(delta));
     float tightness0, tightness1, tightness;
@@ -767,6 +785,12 @@ void process_commands(){
           unsigned long dwell_ms = 0;
           dwell_ms = code_value_ulong(); // milliseconds to wait
           st_synchronize();
+          if(in_tight_mode()){ // Tighten lines before dwelling
+            while(!tight()){
+              manage_heater();
+              manage_inactivity();
+            }
+          }
           refresh_cmd_timeout(); // Set previous_millis_cmd = millis();
           dwell_ms += previous_millis_cmd;  // keep track of when we started waiting
           while((long)(millis() - dwell_ms) < 0){
