@@ -60,6 +60,9 @@
 #define MOTHERBOARD BOARD_RAMPS_13_EFB
 #endif
 
+// If us use drv8825 drivers, uncomment this
+//#define DRV8825
+
 // Define this to set a custom name for your generic Mendel,
 // #define CUSTOM_MENDEL_NAME "This Mendel"
 
@@ -167,7 +170,7 @@
 // The minimal temperature defines the temperature below which the heater will not be enabled It is used
 // to check that the wiring to the thermistor is not broken.
 // Otherwise this would lead to the heater being powered on all the time.
-#define HEATER_0_MINTEMP 5
+#define HEATER_0_MINTEMP 0
 #define HEATER_1_MINTEMP 5
 #define HEATER_2_MINTEMP 5
 #define BED_MINTEMP 5
@@ -443,9 +446,8 @@ const bool Z_MAX_ENDSTOP_INVERTING = true; // set to true to invert the logic of
 // If you have FSRs mounted on your Hangprinter, uncomment this
 #define FSR
 #if defined(FSR)
-const float min_tight[4] = {800.0, 800.0, 800.0, 1000.0};
-const float max_tight[4] = {550.0, 550.0, 550.0, 750.0};
-const float tight_mode_incr = 0.15; // number of mm to take in/let out if line is too slack/to tight
+const float default_tightness = 450.0;
+const float tighten_incr = 0.1; // number of mm to take in/let out if line is too slack/to tight
 // Analog numbering.
 // 14 is labeled T1 on RAMPS silkscreen.
 // 15 is labeled T2 on RAMPS silkscreen.
@@ -472,18 +474,19 @@ const int fsr_pin[4] = {15, 3, 14, 9};
 // 0.39*0.39/(pi*4.6) = 0.010525
 // 0.5*0.5/(pi*8.) = 0.009947
 //#define DEFAULT_SPOOL_BUILDUP_FACTOR 0.010525
-#define DEFAULT_SPOOL_BUILDUP_FACTOR 0.007
+#define DEFAULT_SPOOL_BUILDUP_FACTOR 0.00788
 
 // Measure the total length of lines on each spool when printer is in origo
 // Two A-lines, each of length 150.0 gives total length 300.0
-const float LINE_ON_SPOOL_ORIGO[DIRS] = {7500.0,7500.0,7500.0,6000.0};
+const float LINE_ON_SPOOL_ORIGO[DIRS] = {13800.0,13400.0,14100.0,10500.0};
 //const float LINE_ON_SPOOL_ORIGO[DIRS] = {2460.0,2600.0,2800.0,3000.0};
 //const float LINE_ON_SPOOL_ORIGO[DIRS] = {0.0,0.0,0.0,0.0};
 
 // Squared spool radius. 33.0^2 = 1089.0
 // Assumes equal A, B, C and D radii.
 //#define SPOOL_RADIUS2 1089.0
-#define SPOOL_RADIUS2 3600.0
+//#define SPOOL_RADIUS2 3600.0
+#define SPOOL_RADIUS2 625.0
 
 // Motor gear teeth: 9
 // Sandwich gear teeth: 43
@@ -495,7 +498,10 @@ const float LINE_ON_SPOOL_ORIGO[DIRS] = {7500.0,7500.0,7500.0,6000.0};
 //const float STEPS_PER_SPOOL_RADIAN[DIRS] = {2433.302,2433.302,2433.302,21899.720};
 // Double all of those if 1/32 stepping is used
 //const float STEPS_PER_SPOOL_RADIAN[DIRS] = {4866.604,4866.604,4866.604,21899.720};
-const float STEPS_PER_SPOOL_RADIAN[DIRS] = {14712.990, 14712.990, 14712.990, 14712.990};
+// V3.1
+//const float STEPS_PER_SPOOL_RADIAN[DIRS] = {14712.990, 14712.990, 14712.990, 14712.990};
+// V3.2
+const float STEPS_PER_SPOOL_RADIAN[DIRS] = {8488.2636,8488.2636,8488.2636,8488.2636};
 
 
 // If EXPERIMENTAL_LINE_BUILDUP_COMPENSATION_FEATURE is enabled

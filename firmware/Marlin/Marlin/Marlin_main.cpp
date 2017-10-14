@@ -139,6 +139,7 @@
 CardReader card;
 #endif
 
+bool analog_read_busy = false;
 float homing_feedrate[] = HOMING_FEEDRATE;
 bool axis_relative_modes[] = AXIS_RELATIVE_MODES;
 int feedmultiply = 100; //100->1 200->2
@@ -178,9 +179,8 @@ float endstop_adj[DIRS] = { 0 };
 
 #if defined(FSR)
 bool tight_mode[4] = { false, false, false, false};
-float minimum_tight[4] = { min_tight[A_AXIS], min_tight[B_AXIS], min_tight[C_AXIS], min_tight[D_AXIS] };
-float maximum_tight[4] = { max_tight[A_AXIS], max_tight[B_AXIS], max_tight[C_AXIS], max_tight[D_AXIS] };
-float tight_mode_increment = tight_mode_incr;
+float tight_limits[4] = { default_tightness, default_tightness, default_tightness, default_tightness };
+float tighten_increment = tighten_incr;
 #endif
 float min_pos[DIRS] = { A_MIN_POS, B_MIN_POS, C_MIN_POS, D_MIN_POS };
 float max_pos[DIRS] = { A_MAX_POS, B_MAX_POS, C_MAX_POS, D_MAX_POS };
@@ -220,7 +220,7 @@ static float destination[4] = { 0, 0, 0, 0 };
 
 static float offset[3] = { 0, 0, 0 };
 static bool home_all_axis = true;
-static float feedrate = 1500.0, next_feedrate, saved_feedrate;
+static float feedrate = 1500.0, next_feedrate, saved_feedrate, tight_mode_feedrate = 3000.0;
 static long gcode_N, gcode_LastN, Stopped_gcode_LastN = 0;
 
 static bool relative_mode = false;
@@ -439,88 +439,186 @@ void setup(){
 }
 
 float read_fsr(int abcd){
-  return analogRead(fsr_pin[abcd]);
+  float read0, read1;
+  read0 = analogRead(fsr_pin[abcd]);
+  read1 = analogRead(fsr_pin[abcd]);
+  if(fabs(read0 - read1) > 50.0)
+    return read_fsr(abcd);
+  return (read0 + read1) / 2.0;
 }
 
-bool tight(){
-  float readings01[DIRS][2];
-  float mean_readings[DIRS];
-  for(int i = 0; i < DIRS; i++){
-    readings01[i][0] = read_fsr(i);
-    readings01[i][1] = read_fsr(i);
-    mean_readings[i] = (readings01[i][0] + readings01[i][1])/2.0;
-    if(mean_readings[i] > minimum_tight[i] || mean_readings[i] < maximum_tight[i]){
+bool all_above(float* vals, float limit, int size){
+  for(int i = 0; i < size; i++){
+    if(vals[i] < limit){
       return false;
     }
   }
   return true;
 }
 
+bool all_above_arr(float* vals, float* limits, int size){
+  for(int i = 0; i < size; i++){
+    if(vals[i] < limits[i]){
+      return false;
+    }
+  }
+  return true;
+}
+
+// Tightens all lines until one fsr reaches limit.
+// At that point, the tight_limits array is updated with current fsr values
+void tighten_all_lines(float limit){
+  float readings[DIRS];
+  float prev_delta[NUM_AXIS];
+
+  for(int i = 0; i < DIRS; i++){
+    readings[i] = read_fsr(i);
+  }
+
+  while(all_above(readings, limit, DIRS)){
+    memcpy(prev_delta, delta, sizeof(delta));
+    delta[A_AXIS] -= tighten_increment;
+    delta[B_AXIS] -= tighten_increment;
+    delta[C_AXIS] -= tighten_increment;
+
+    plan_buffer_line(delta, prev_delta, destination[E_CARTH], feedrate*feedmultiply/60/100, active_extruder, true);
+    st_synchronize();
+    for(int i = 0; i < DIRS; i++){
+      readings[i] = read_fsr(i);
+    }
+  }
+}
+
+int belows(float* vals, float* limits, int size){
+  int count = 0;
+  for(int i=0; i<size; i++){
+    if(vals[i] < limits[i]){
+      count++;
+    }
+  }
+  return count;
+}
+
+bool sum_less(float* readings, float limit, int size){
+  float sum = 0.0;
+  for(int i=0; i<size; i++){
+    sum += readings[i];
+  }
+  if(sum < limit){
+    return true;
+  }
+  return false;
+}
+
+bool abc_above(float* readings, float* limits, int size){
+  for(int i=0; i<size; i++){
+    if(readings[i] < limits[i]){
+      return false;
+    }
+  }
+  return true;
+}
+
+// Tighten one axis
+void tighten(int axis){
+  float readings[DIRS];
+  float prev_delta[NUM_AXIS];
+  analog_read_busy = true;
+
+  for(int i = 0; i < DIRS; i++){
+    readings[i] = read_fsr(i);
+  }
+
+  //while(belows(readings, tight_limits, DIRS) < 3){
+  //while(!sum_less(readings, limit, DIRS)){ // Seems almost random where it triggers...
+  //while(abc_above(readings, tight_limits, 3)){ // Seems we get different results depending on who of abc is the trigger
+  while(readings[axis] > tight_limits[axis]){
+    memcpy(prev_delta, delta, sizeof(delta));
+    if(all_above_arr(readings, tight_limits, DIRS)){ // Go faster if all lines slack
+      delta[axis] -= 2*tighten_increment;
+    } else {
+      delta[axis] -= tighten_increment;
+    }
+    plan_buffer_line(delta, prev_delta, destination[E_CARTH], feedrate*feedmultiply/60/100, active_extruder, true);
+    st_synchronize();
+    for(int i = 0; i < DIRS; i++){
+      readings[i] = read_fsr(i);
+    }
+  }
+  analog_read_busy = false;
+}
+
 bool in_tight_mode(){
   return tight_mode[A_AXIS] || tight_mode[B_AXIS] || tight_mode[C_AXIS] || tight_mode[D_AXIS];
 }
 
-void loop(){
-  // Tight mode goes on right here...
+void tight_mode_step(){
   int bufferLength = block_buffer_head - block_buffer_tail;
   if(in_tight_mode() && (bufferLength == 0)){
     float prev_delta[NUM_AXIS];
     memcpy(prev_delta, delta, sizeof(delta));
-    float tightness0, tightness1, tightness;
-    bool delta_changed = false;
+    float tightness[4];
 
-    for(int i=0; i<4; i++){
+    for(int i=0; i<DIRS; i++){
       if(tight_mode[i]){
-        tightness0 = read_fsr(i);
-        tightness1 = read_fsr(i);
-        tightness = (tightness0 + tightness1)/2.0;
-        if(tightness > minimum_tight[i]){ // line not tight...
-          //delta[i] -= tight_mode_increment;
-          delta[i] -= (tightness - minimum_tight[i])*0.015;
-          delta_changed = true;
-        } else if(tightness < maximum_tight[i]){ // line too tight
-          //delta[i] += tight_mode_increment;
-          delta[i] += (maximum_tight[i] - tightness)*0.015;
-          delta_changed = true;
+        tightness[i] = read_fsr(i);
+        if(tightness[i] > tight_limits[i]+10.0){ // line not tight...
+          delta[i] -= (tightness[i] - tight_limits[i])*0.013;
+        } else if(tightness[i] < tight_limits[i]-10.0){ // line too tight
+          delta[i] += (tight_limits[i] - tightness[i])*0.020;
         }
       }
     }
-    if(delta_changed){
-      plan_buffer_line(delta, prev_delta, destination[E_CARTH], feedrate*feedmultiply/60/100, active_extruder, true);
-    }
+    plan_buffer_line(delta, prev_delta, destination[E_CARTH], tight_mode_feedrate*feedmultiply/60/100, active_extruder, true);
   }
+}
 
-  if(buflen < (BUFSIZE-1)) get_command();
+void loop(){
+  int count = 0;
+  while(1){
+    // Tight mode goes on right here...
+    tight_mode_step();
+
+    if(buflen < (BUFSIZE-1)) get_command();
 #ifdef SDSUPPORT
-  card.checkautostart(false);
+    card.checkautostart(false);
 #endif
-  if(buflen){
+    if(buflen){
 #ifdef SDSUPPORT
-    if(card.saving){
-      if(strstr_P(cmdbuffer[bufindr], PSTR("M29")) == NULL){
-        card.write_command(cmdbuffer[bufindr]);
-        if(card.logging){
-          process_commands();
+      if(card.saving){
+        if(strstr_P(cmdbuffer[bufindr], PSTR("M29")) == NULL){
+          card.write_command(cmdbuffer[bufindr]);
+          if(card.logging){
+            process_commands();
+          }else{
+            SERIAL_PROTOCOLLNPGM(MSG_OK);
+          }
         }else{
-          SERIAL_PROTOCOLLNPGM(MSG_OK);
+          card.closefile();
+          SERIAL_PROTOCOLLNPGM(MSG_FILE_SAVED);
         }
       }else{
-        card.closefile();
-        SERIAL_PROTOCOLLNPGM(MSG_FILE_SAVED);
+        process_commands();
       }
-    }else{
-      process_commands();
-    }
 #else
-    process_commands();
+      process_commands();
 #endif //SDSUPPORT
-    buflen = (buflen-1);
-    bufindr = (bufindr + 1)%BUFSIZE;
+      buflen = (buflen-1);
+      bufindr = (bufindr + 1)%BUFSIZE;
+    }
+    //check heater every n milliseconds
+    if(in_tight_mode){
+      count++;
+      if(count % 10 == 0){
+        manage_heater();
+        count = 0;
+      }
+    } else {
+      manage_heater();
+      manage_inactivity();
+    }
+    //checkHitEndstops();
   }
-  //check heater every n milliseconds
-  manage_heater();
-  manage_inactivity();
-  //checkHitEndstops();
 }
 
 void get_command(){
@@ -785,12 +883,6 @@ void process_commands(){
           unsigned long dwell_ms = 0;
           dwell_ms = code_value_ulong(); // milliseconds to wait
           st_synchronize();
-          if(in_tight_mode()){ // Tighten lines before dwelling
-            while(!tight()){
-              manage_heater();
-              manage_inactivity();
-            }
-          }
           refresh_cmd_timeout(); // Set previous_millis_cmd = millis();
           dwell_ms += previous_millis_cmd;  // keep track of when we started waiting
           while((long)(millis() - dwell_ms) < 0){
@@ -805,10 +897,7 @@ void process_commands(){
       case 6:
         {
           float tmp_delta[NUM_AXIS];
-          tmp_delta[A_AXIS] = delta[A_AXIS];
-          tmp_delta[B_AXIS] = delta[B_AXIS];
-          tmp_delta[C_AXIS] = delta[C_AXIS];
-          tmp_delta[D_AXIS] = delta[D_AXIS];
+          memcpy(tmp_delta, delta, sizeof(delta));
 
           if(code_seen('A')) tmp_delta[A_AXIS] += code_value();
           if(code_seen('B')) tmp_delta[B_AXIS] += code_value();
@@ -831,10 +920,7 @@ void process_commands(){
           // WARNING: Using G7 first, then G1 will give you chaos!
           //          Make sure to use G92 after G7 moves, so G1 sees sane previous delta lengths.
           float prev_delta[NUM_AXIS];
-          prev_delta[A_AXIS] = delta[A_AXIS];
-          prev_delta[B_AXIS] = delta[B_AXIS];
-          prev_delta[C_AXIS] = delta[C_AXIS];
-          prev_delta[D_AXIS] = delta[D_AXIS];
+          memcpy(prev_delta, delta, sizeof(delta));
 
           if(code_seen('A')) delta[A_AXIS] += code_value();
           if(code_seen('B')) delta[B_AXIS] += code_value();
@@ -856,10 +942,7 @@ void process_commands(){
           // WARNING: Using G8 first, then G1 will give you chaos!
           //          Make sure to use G92 after G8 moves, so G1 sees sane previous delta lengths.
           float prev_delta[NUM_AXIS];
-          prev_delta[A_AXIS] = delta[A_AXIS];
-          prev_delta[B_AXIS] = delta[B_AXIS];
-          prev_delta[C_AXIS] = delta[C_AXIS];
-          prev_delta[D_AXIS] = delta[D_AXIS];
+          memcpy(prev_delta, delta, sizeof(delta));
 
           if(code_seen('A')) delta[A_AXIS] = INITIAL_DISTANCES[A_AXIS] + code_value();
           if(code_seen('B')) delta[B_AXIS] = INITIAL_DISTANCES[B_AXIS] + code_value();
@@ -877,11 +960,11 @@ void process_commands(){
         }
         break;
       case 28: // G28 means "we're already in origo" for Hangprinter
-        current_position[A_AXIS] = 0.0;
-        current_position[B_AXIS] = 0.0;
-        current_position[C_AXIS] = 0.0;
-        current_position[D_AXIS] = 0.0;
+        current_position[X_AXIS] = 0.0;
+        current_position[Y_AXIS] = 0.0;
+        current_position[Z_AXIS] = 0.0;
         calculate_delta(current_position, delta);
+        plan_set_position(delta, destination[E_CARTH]);
         break;
       case 90: // G90
         relative_mode = false;
@@ -920,11 +1003,21 @@ void process_commands(){
           }
         }
         if(code_seen('F')){ // G95 tightening speed is adjustable...
-          next_feedrate = code_value();
-          if(next_feedrate > 0.0){
-            saved_feedrate = feedrate;
-            feedrate = next_feedrate;
+          tight_mode_feedrate = code_value();
+        }
+        break;
+      case 96: // G96
+        for(int i=0; i<DIRS; i++){
+          if(code_seen(axis_codes[i])){
+            tighten(i);
           }
+        }
+        break;
+      case 97: // G97 Calibrate FSR
+        if(code_seen('S') && code_value() > 300.0){
+          tighten_all_lines(fabs(code_value()));
+        } else {
+          tighten_all_lines(0.0);
         }
         break;
 #endif // end of EXPERIMENTAL_AUTO_CALIBRATION_FEATURE code
@@ -1098,7 +1191,7 @@ void process_commands(){
         if(code_seen('S')) setTargetBed(code_value());
         break;
       case 105 : // M105
-        if(setTargetedHotend(105)){
+        if(setTargetedHotend(105) || analog_read_busy){
           break;
         }
 #if defined(TEMP_0_PIN) && TEMP_0_PIN > -1
@@ -1326,20 +1419,18 @@ void process_commands(){
             break;
           case 95: // M95 Set tight mode increment
             if(code_seen('S')){
-              tight_mode_increment = fabs(code_value()); // Really need this to be positive
+              tighten_increment = fabs(code_value()); // Really need this to be positive
             }
             break;
-          case 96: // M96 Set FSR minimum tightness
-            for(int i=0; i<4; i++){
-              if(code_seen(axis_codes[i])){
-                minimum_tight[i] = code_value();
-              }
+          case 97: // M97 Set FSR tight limits to current values
+            for(int i=0; i<DIRS-1; i++){
+              tight_limits[i] = read_fsr(i);
             }
-            break;
-          case 97: // M97 Set FSR maximum tightness
-            for(int i=0; i<4; i++){
-              if(code_seen(axis_codes[i])){
-                maximum_tight[i] = code_value();
+            // D-line gets the max ABC val
+            tight_limits[DIRS-1] = tight_limits[0];
+            for(int i=1; i<DIRS-1; i++){
+              if(tight_limits[i] > tight_limits[i-1]){
+                tight_limits[DIRS-1] = tight_limits[i];
               }
             }
             break;
@@ -1362,7 +1453,7 @@ void process_commands(){
               SERIAL_ECHO(delta[C_AXIS] - INITIAL_DISTANCES[C_AXIS]);
               SERIAL_ECHO(", ");
               SERIAL_ECHO(delta[D_AXIS] - INITIAL_DISTANCES[D_AXIS]);
-              SERIAL_ECHO("]\n");
+              SERIAL_ECHO("],\n");
             } else {
               SERIAL_ECHOLN("Current position in Carthesian system:");
               SERIAL_PROTOCOLPGM("X:");
@@ -1374,7 +1465,7 @@ void process_commands(){
               SERIAL_PROTOCOLPGM(" E:");
               SERIAL_PROTOCOL(current_position[E_CARTH]);
 
-              SERIAL_PROTOCOLPGM("\nStep count along each motor abcd-axis:\nA:");
+              SERIAL_PROTOCOLPGM("\nStep count along each motor abcd-axis:\n");
               SERIAL_PROTOCOLPGM(" A:");
               SERIAL_PROTOCOL(st_get_position(A_AXIS));
               SERIAL_PROTOCOLPGM(" B:");
@@ -1396,75 +1487,75 @@ void process_commands(){
 
               SERIAL_PROTOCOLLN("");
             }
-          break;
+            break;
           case 120: // M120
-          enable_endstops(false) ;
-          break;
+            enable_endstops(false) ;
+            break;
           case 121: // M121
-          enable_endstops(true) ;
-          break;
+            enable_endstops(true) ;
+            break;
           case 119: // M119
-          SERIAL_PROTOCOLLN(MSG_M119_REPORT);
+            SERIAL_PROTOCOLLN(MSG_M119_REPORT);
 #if defined(X_MIN_PIN) && X_MIN_PIN > -1
-          SERIAL_PROTOCOLPGM(MSG_X_MIN);
-          SERIAL_PROTOCOLLN(((READ(X_MIN_PIN)^X_MIN_ENDSTOP_INVERTING)?MSG_ENDSTOP_HIT:MSG_ENDSTOP_OPEN));
+            SERIAL_PROTOCOLPGM(MSG_X_MIN);
+            SERIAL_PROTOCOLLN(((READ(X_MIN_PIN)^X_MIN_ENDSTOP_INVERTING)?MSG_ENDSTOP_HIT:MSG_ENDSTOP_OPEN));
 #endif
 #if defined(X_MAX_PIN) && X_MAX_PIN > -1
-          SERIAL_PROTOCOLPGM(MSG_X_MAX);
-          SERIAL_PROTOCOLLN(((READ(X_MAX_PIN)^X_MAX_ENDSTOP_INVERTING)?MSG_ENDSTOP_HIT:MSG_ENDSTOP_OPEN));
+            SERIAL_PROTOCOLPGM(MSG_X_MAX);
+            SERIAL_PROTOCOLLN(((READ(X_MAX_PIN)^X_MAX_ENDSTOP_INVERTING)?MSG_ENDSTOP_HIT:MSG_ENDSTOP_OPEN));
 #endif
 #if defined(Y_MIN_PIN) && Y_MIN_PIN > -1
-          SERIAL_PROTOCOLPGM(MSG_Y_MIN);
-          SERIAL_PROTOCOLLN(((READ(Y_MIN_PIN)^Y_MIN_ENDSTOP_INVERTING)?MSG_ENDSTOP_HIT:MSG_ENDSTOP_OPEN));
+            SERIAL_PROTOCOLPGM(MSG_Y_MIN);
+            SERIAL_PROTOCOLLN(((READ(Y_MIN_PIN)^Y_MIN_ENDSTOP_INVERTING)?MSG_ENDSTOP_HIT:MSG_ENDSTOP_OPEN));
 #endif
 #if defined(Y_MAX_PIN) && Y_MAX_PIN > -1
-          SERIAL_PROTOCOLPGM(MSG_Y_MAX);
-          SERIAL_PROTOCOLLN(((READ(Y_MAX_PIN)^Y_MAX_ENDSTOP_INVERTING)?MSG_ENDSTOP_HIT:MSG_ENDSTOP_OPEN));
+            SERIAL_PROTOCOLPGM(MSG_Y_MAX);
+            SERIAL_PROTOCOLLN(((READ(Y_MAX_PIN)^Y_MAX_ENDSTOP_INVERTING)?MSG_ENDSTOP_HIT:MSG_ENDSTOP_OPEN));
 #endif
 #if defined(Z_MIN_PIN) && Z_MIN_PIN > -1
-          SERIAL_PROTOCOLPGM(MSG_Z_MIN);
-          SERIAL_PROTOCOLLN(((READ(Z_MIN_PIN)^Z_MIN_ENDSTOP_INVERTING)?MSG_ENDSTOP_HIT:MSG_ENDSTOP_OPEN));
+            SERIAL_PROTOCOLPGM(MSG_Z_MIN);
+            SERIAL_PROTOCOLLN(((READ(Z_MIN_PIN)^Z_MIN_ENDSTOP_INVERTING)?MSG_ENDSTOP_HIT:MSG_ENDSTOP_OPEN));
 #endif
 #if defined(Z_MAX_PIN) && Z_MAX_PIN > -1
-          SERIAL_PROTOCOLPGM(MSG_Z_MAX);
-          SERIAL_PROTOCOLLN(((READ(Z_MAX_PIN)^Z_MAX_ENDSTOP_INVERTING)?MSG_ENDSTOP_HIT:MSG_ENDSTOP_OPEN));
+            SERIAL_PROTOCOLPGM(MSG_Z_MAX);
+            SERIAL_PROTOCOLLN(((READ(Z_MAX_PIN)^Z_MAX_ENDSTOP_INVERTING)?MSG_ENDSTOP_HIT:MSG_ENDSTOP_OPEN));
 #endif
-          break;
-          //TODO: update for all axis, use for loop
+            break;
+            //TODO: update for all axis, use for loop
           case 200: // M200 D<millimeters> set filament diameter and set E axis units to cubic millimeters (use S0 to set back to millimeters).
-          {
+            {
 
-            tmp_extruder = active_extruder;
-            if(code_seen('T')){
-              tmp_extruder = code_value();
-              if(tmp_extruder >= EXTRUDERS){
-                SERIAL_ECHO_START;
-                SERIAL_ECHO(MSG_M200_INVALID_EXTRUDER);
+              tmp_extruder = active_extruder;
+              if(code_seen('T')){
+                tmp_extruder = code_value();
+                if(tmp_extruder >= EXTRUDERS){
+                  SERIAL_ECHO_START;
+                  SERIAL_ECHO(MSG_M200_INVALID_EXTRUDER);
+                  break;
+                }
+              }
+
+              float area = .0;
+              if(code_seen('D')){
+                float diameter = code_value();
+                // setting any extruder filament size disables volumetric on the assumption that
+                // slicers either generate in extruder values as cubic mm or as as filament feeds
+                // for all extruders
+                volumetric_enabled = (diameter != 0.0);
+                if(volumetric_enabled){
+
+                  filament_size[tmp_extruder] = diameter;
+                  // make sure all extruders have some sane value for the filament size
+                  for (int i=0; i<EXTRUDERS; i++)
+                    if(! filament_size[i]) filament_size[i] = DEFAULT_NOMINAL_FILAMENT_DIA;
+                }
+              } else {
+                //reserved for setting filament diameter via UFID or filament measuring device
                 break;
               }
+              calculate_volumetric_multipliers();
             }
-
-            float area = .0;
-            if(code_seen('D')){
-              float diameter = code_value();
-              // setting any extruder filament size disables volumetric on the assumption that
-              // slicers either generate in extruder values as cubic mm or as as filament feeds
-              // for all extruders
-              volumetric_enabled = (diameter != 0.0);
-              if(volumetric_enabled){
-
-                filament_size[tmp_extruder] = diameter;
-                // make sure all extruders have some sane value for the filament size
-                for (int i=0; i<EXTRUDERS; i++)
-                  if(! filament_size[i]) filament_size[i] = DEFAULT_NOMINAL_FILAMENT_DIA;
-              }
-            } else {
-              //reserved for setting filament diameter via UFID or filament measuring device
-              break;
-            }
-            calculate_volumetric_multipliers();
-          }
-          break;
+            break;
 
 
 
@@ -1472,125 +1563,125 @@ void process_commands(){
 
 
           case 201: // M201 // max_acceleration_units_per_sq_second is defined per abcd axis, so axis_codes ABCD here
-          for(int8_t i=0; i < NUM_AXIS; i++){
-            if(code_seen(axis_codes[i])){
-              max_acceleration_units_per_sq_second[i] = code_value();
+            for(int8_t i=0; i < NUM_AXIS; i++){
+              if(code_seen(axis_codes[i])){
+                max_acceleration_units_per_sq_second[i] = code_value();
+              }
             }
-          }
-          // steps per sq second need to be updated to agree with the units per sq second (as they are what is used in the planner)
-          reset_acceleration_rates();
-          break;
+            // steps per sq second need to be updated to agree with the units per sq second (as they are what is used in the planner)
+            reset_acceleration_rates();
+            break;
           case 203: // M203 max feedrate mm/sec // max_feedrate[NUM_AXIS] is abcd axis, do axis_codes ABCD here
-          for(int8_t i=0; i < NUM_AXIS; i++){
-            if(code_seen(axis_codes[i])) max_feedrate[i] = code_value();
-          }
-          break;
+            for(int8_t i=0; i < NUM_AXIS; i++){
+              if(code_seen(axis_codes[i])) max_feedrate[i] = code_value();
+            }
+            break;
           case 204: // M204 acclereration S normal moves T filmanent only moves
-          {
-            if(code_seen('S')) acceleration = code_value() ;
-            if(code_seen('T')) retract_acceleration = code_value() ;
-          }
-          break;
+            {
+              if(code_seen('S')) acceleration = code_value() ;
+              if(code_seen('T')) retract_acceleration = code_value() ;
+            }
+            break;
           case 205: //M205 advanced settings:  minimum travel speed S=while printing T=travel only,  B=minimum segment time X= maximum xy jerk, Z=maximum Z jerk
-          {
-            if(code_seen('S')) minimumfeedrate = code_value();
-            if(code_seen('T')) mintravelfeedrate = code_value();
-            if(code_seen('B')) minsegmenttime = code_value() ;
-            if(code_seen('X')) max_xy_jerk = code_value() ;
-            if(code_seen('Z')) max_z_jerk = code_value() ;
-            if(code_seen('E')) max_e_jerk = code_value() ;
-          }
-          break;
+            {
+              if(code_seen('S')) minimumfeedrate = code_value();
+              if(code_seen('T')) mintravelfeedrate = code_value();
+              if(code_seen('B')) minsegmenttime = code_value() ;
+              if(code_seen('X')) max_xy_jerk = code_value() ;
+              if(code_seen('Z')) max_z_jerk = code_value() ;
+              if(code_seen('E')) max_e_jerk = code_value() ;
+            }
+            break;
 #ifdef DELTA
           case 665: // M665 set delta config
 #ifdef HANGPRINTER
-          // Hangprinter config:
-          // Q<Ax> W<Ay> E<Az> R<Bx> T<By> Y<Bz> U<Cx> I<Cy> O<Cz> P<Dz> S<segments_per_sec>
-          if(code_seen('Q')) anchor_A_x = code_value();
-          if(code_seen('W')) anchor_A_y = code_value();
-          if(code_seen('E')) anchor_A_z = code_value();
-          if(code_seen('R')) anchor_B_x = code_value();
-          if(code_seen('T')) anchor_B_y = code_value();
-          if(code_seen('Y')) anchor_B_z = code_value();
-          if(code_seen('U')) anchor_C_x = code_value();
-          if(code_seen('I')) anchor_C_y = code_value();
-          if(code_seen('O')) anchor_C_z = code_value();
-          if(code_seen('P')) anchor_D_z = code_value();
+            // Hangprinter config:
+            // Q<Ax> W<Ay> E<Az> R<Bx> T<By> Y<Bz> U<Cx> I<Cy> O<Cz> P<Dz> S<segments_per_sec>
+            if(code_seen('Q')) anchor_A_x = code_value();
+            if(code_seen('W')) anchor_A_y = code_value();
+            if(code_seen('E')) anchor_A_z = code_value();
+            if(code_seen('R')) anchor_B_x = code_value();
+            if(code_seen('T')) anchor_B_y = code_value();
+            if(code_seen('Y')) anchor_B_z = code_value();
+            if(code_seen('U')) anchor_C_x = code_value();
+            if(code_seen('I')) anchor_C_y = code_value();
+            if(code_seen('O')) anchor_C_z = code_value();
+            if(code_seen('P')) anchor_D_z = code_value();
 #else // M665 set delta configurations L<diagonal_rod> R<delta_radius> S<segments_per_sec>
-          if(code_seen('L')){
-            delta_diagonal_rod= code_value();
-          }
-          if(code_seen('R')){
-            delta_radius= code_value();
-          }
-          recalc_delta_settings(delta_radius, delta_diagonal_rod);
+            if(code_seen('L')){
+              delta_diagonal_rod= code_value();
+            }
+            if(code_seen('R')){
+              delta_radius= code_value();
+            }
+            recalc_delta_settings(delta_radius, delta_diagonal_rod);
 #endif // HANGPRINTER
-          if(code_seen('S')){
-            delta_segments_per_second= code_value();
-          }
-          break;
+            if(code_seen('S')){
+              delta_segments_per_second= code_value();
+            }
+            break;
 
           case 666: // M666 set delta endstop adjustemnt // ABCD needs one endstop each so axis_codes ABCD here
-          for(int8_t i=0; i < 3; i++){
-            if(code_seen(axis_codes[i])) endstop_adj[i] = code_value();
-          }
-          break;
+            for(int8_t i=0; i < 3; i++){
+              if(code_seen(axis_codes[i])) endstop_adj[i] = code_value();
+            }
+            break;
 #endif // DELTA
           case 220: // M220 S<factor in percent>- set speed factor override percentage
-          {
-            if(code_seen('S')){
-              feedmultiply = code_value() ;
-            }
-          }
-          break;
-          case 221: // M221 S<factor in percent>- set extrude factor override percentage
-          {
-            if(code_seen('S')){
-              int tmp_code = code_value();
-              if(code_seen('T')){
-                if(setTargetedHotend(221)){
-                  break;
-                }
-                extruder_multiply[tmp_extruder] = tmp_code;
-              }else{
-                extrudemultiply = tmp_code ;
+            {
+              if(code_seen('S')){
+                feedmultiply = code_value() ;
               }
             }
-          }
-          break;
-
-          case 226: // M226 P<pin number> S<pin state>- Wait until the specified pin reaches the state required
-          {
-            if(code_seen('P')){
-              int pin_number = code_value(); // pin number
-              int pin_state = -1; // required pin state - default is inverted
-
-              if(code_seen('S')) pin_state = code_value(); // required pin state
-
-              if(pin_state >= -1 && pin_state <= 1){
-
-                for(int8_t i = 0; i < (int8_t)(sizeof(sensitive_pins)/sizeof(int)); i++){
-                  if(sensitive_pins[i] == pin_number){
-                    pin_number = -1;
+            break;
+          case 221: // M221 S<factor in percent>- set extrude factor override percentage
+            {
+              if(code_seen('S')){
+                int tmp_code = code_value();
+                if(code_seen('T')){
+                  if(setTargetedHotend(221)){
                     break;
                   }
+                  extruder_multiply[tmp_extruder] = tmp_code;
+                }else{
+                  extrudemultiply = tmp_code ;
                 }
+              }
+            }
+            break;
 
-                if(pin_number > -1){
-                  int target = LOW;
+          case 226: // M226 P<pin number> S<pin state>- Wait until the specified pin reaches the state required
+            {
+              if(code_seen('P')){
+                int pin_number = code_value(); // pin number
+                int pin_state = -1; // required pin state - default is inverted
 
-                  st_synchronize();
+                if(code_seen('S')) pin_state = code_value(); // required pin state
 
-                  pinMode(pin_number, INPUT);
+                if(pin_state >= -1 && pin_state <= 1){
 
-                  switch(pin_state){
-                    case 1:
-                      target = HIGH;
+                  for(int8_t i = 0; i < (int8_t)(sizeof(sensitive_pins)/sizeof(int)); i++){
+                    if(sensitive_pins[i] == pin_number){
+                      pin_number = -1;
                       break;
+                    }
+                  }
 
-                    case 0:
-                      target = LOW;
-                      break;
+                  if(pin_number > -1){
+                    int target = LOW;
+
+                    st_synchronize();
+
+                    pinMode(pin_number, INPUT);
+
+                    switch(pin_state){
+                      case 1:
+                        target = HIGH;
+                        break;
+
+                      case 0:
+                        target = LOW;
+                        break;
 
                     case -1:
                       target = !digitalRead(pin_number);

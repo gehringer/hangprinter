@@ -417,11 +417,13 @@ ISR(TIMER1_COMPA_vect)
         // For examle read a sensor that feels if a step has been skipped?
         // Five nops tested to be shortest possible delay using atmega 2560 (16Mhz) and drv8825
         // driver chip on a RAMPS v1.4.
+#if defined(DRV8825)
         __asm__ volatile("nop\n\t"
                          "nop\n\t"
                          "nop\n\t"
                          "nop\n\t"
                          "nop\n\t");
+#endif
         WRITE(X_STEP_PIN, INVERT_X_STEP_PIN);
       }
 
@@ -432,11 +434,13 @@ ISR(TIMER1_COMPA_vect)
         if(current_block->count_it){
           count_position[B_AXIS]+=count_direction[B_AXIS];
         }
+#if defined(DRV8825)
         __asm__ volatile("nop\n\t"
                          "nop\n\t"
                          "nop\n\t"
                          "nop\n\t"
                          "nop\n\t");
+#endif
         WRITE(Y_STEP_PIN, INVERT_Y_STEP_PIN);
       }
 
@@ -447,11 +451,13 @@ ISR(TIMER1_COMPA_vect)
         if(current_block->count_it){
           count_position[C_AXIS]+=count_direction[C_AXIS];
         }
+#if defined(DRV8825)
         __asm__ volatile("nop\n\t"
                          "nop\n\t"
                          "nop\n\t"
                          "nop\n\t"
                          "nop\n\t");
+#endif
         WRITE(Z_STEP_PIN, INVERT_Z_STEP_PIN);
       }
 
@@ -463,11 +469,13 @@ ISR(TIMER1_COMPA_vect)
         if(current_block->count_it){
           count_position[D_AXIS]+=count_direction[D_AXIS];
         }
+#if defined(DRV8825)
         __asm__ volatile("nop\n\t"
                          "nop\n\t"
                          "nop\n\t"
                          "nop\n\t"
                          "nop\n\t");
+#endif
         WRITE(E1_STEP_PIN, INVERT_E1_STEP_PIN);
       }
 
@@ -478,11 +486,13 @@ ISR(TIMER1_COMPA_vect)
         if(current_block->count_it){
           count_position[E_AXIS]+=count_direction[E_AXIS];
         }
+#if defined(DRV8825)
         __asm__ volatile("nop\n\t"
                          "nop\n\t"
                          "nop\n\t"
                          "nop\n\t"
                          "nop\n\t");
+#endif
         WRITE_E_STEP(INVERT_E_STEP_PIN);
       }
       step_events_completed += 1;

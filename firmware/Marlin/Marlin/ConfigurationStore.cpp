@@ -294,17 +294,12 @@ void Config_PrintSettings(bool forReplay) {
 
 #if defined(FSR)
   SERIAL_ECHO_START;
-  SERIAL_ECHOPAIR("  M95 S", tight_mode_increment);
+  SERIAL_ECHOPAIR("M95 S", tighten_increment);
   SERIAL_EOL;
-  SERIAL_ECHOPAIR("  M96 A", minimum_tight[A_AXIS]);
-  SERIAL_ECHOPAIR(" B", minimum_tight[B_AXIS]);
-  SERIAL_ECHOPAIR(" C", minimum_tight[C_AXIS]);
-  SERIAL_ECHOPAIR(" D", minimum_tight[D_AXIS]);
-  SERIAL_EOL;
-  SERIAL_ECHOPAIR("  M97 A", maximum_tight[A_AXIS]);
-  SERIAL_ECHOPAIR(" B", maximum_tight[B_AXIS]);
-  SERIAL_ECHOPAIR(" C", maximum_tight[C_AXIS]);
-  SERIAL_ECHOPAIR(" D", maximum_tight[D_AXIS]);
+  SERIAL_ECHOPAIR("M97 A", tight_limits[A_AXIS]);
+  SERIAL_ECHOPAIR(" B", tight_limits[B_AXIS]);
+  SERIAL_ECHOPAIR(" C", tight_limits[C_AXIS]);
+  SERIAL_ECHOPAIR(" D", tight_limits[D_AXIS]);
   SERIAL_EOL;
 #endif
 
