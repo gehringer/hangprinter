@@ -87,7 +87,7 @@
 #define DIRS 4
 
 // If you want the experimental line buildup compensation feature with your Hangprinter, uncomment this.
-//#define EXPERIMENTAL_LINE_BUILDUP_COMPENSATION_FEATURE
+#define EXPERIMENTAL_LINE_BUILDUP_COMPENSATION_FEATURE
 
 /* ----- How many lines in each direction? --- */
 #define MECHANICAL_ADVANTAGE_A 1
@@ -117,10 +117,10 @@ const int nr_of_lines_in_direction[DIRS] = {MECHANICAL_ADVANTAGE_A*ACTION_POINTS
 // Total length of lines on each spool
 // Default assumes all nine lines are cut to length 7500 mm.
 // Change to whatever length you have cut your different lines to.
-const float MOUNTED_LINE[DIRS] = {7500.0,7500.0,7500.0,7500.0};
+const float MOUNTED_LINE[DIRS] = {7380.0,7380.0,7380.0,5000.0};
 
 // Measuring your spool radii and adjusting this number will improve your Hangprinter's precision
-const float SPOOL_RADII[DIRS] = { 50.0, 50.0, 50.0, 50.0 };
+const float SPOOL_RADII[DIRS] = { 49.85, 49.8, 49.73, 49.75 };
 
 // Motor gear teeth: 10
 // Sandwich gear teeth: 100
@@ -339,7 +339,7 @@ const bool Z_MAX_ENDSTOP_INVERTING = true; // set to true to invert the logic of
 #define INVERT_Y_DIR true  // INVERT_B
 #define INVERT_Z_DIR false // INVERT_C
 
-#define INVERT_E0_DIR false   // INVERT_E
+#define INVERT_E0_DIR true   // INVERT_E
 #define INVERT_E1_DIR true    // INVERT_D
 #define INVERT_E2_DIR false
 
@@ -396,7 +396,7 @@ const bool Z_MAX_ENDSTOP_INVERTING = true; // set to true to invert the logic of
 //===========================================================================
 // If EXPERIMENTAL_LINE_BUILDUP_COMPENSATION_FEATURE is enabled
 // then constant ABCD values are calculated on the fly and used only used to calculate accelerations
-#define DEFAULT_ESTEPS 410.0 // 410.0 set quite at random
+#define DEFAULT_ESTEPS 415.0 // 415.0 set to match Bondtech BMG extruder
 #if defined(EXPERIMENTAL_LINE_BUILDUP_COMPENSATION_FEATURE)
 #define DEFAULT_AXIS_STEPS_PER_UNIT   {0, 0, 0, 0, DEFAULT_ESTEPS}
 #else
