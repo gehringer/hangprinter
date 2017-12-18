@@ -72,16 +72,19 @@
 // Or do other measurments and calculate Carthesian axis lengths by trigonometry
 // See Hangprinter calibration manual for help:
 // https://vitana.se/opr3d/tbear/index.html#hangprinter_project_21
+//
+// M665 Q0.0 W-2300.0 E-145.0 R1935.0 T1230.0 Y-145.0 U-2061.0 I1050.0 O-145.0 P3580.0
+//
 #define ANCHOR_A_X 0.0
-#define ANCHOR_A_Y -2163.0
-#define ANCHOR_A_Z -75.5
-#define ANCHOR_B_X -1841.0
-#define ANCHOR_B_Y 741.0
-#define ANCHOR_B_Z -75.5
-#define ANCHOR_C_X 1639.0
-#define ANCHOR_C_Y 1404.0
-#define ANCHOR_C_Z -75.5
-#define ANCHOR_D_Z 3250.5
+#define ANCHOR_A_Y -2300.0
+#define ANCHOR_A_Z -175.0
+#define ANCHOR_B_X 1935.0
+#define ANCHOR_B_Y 1230.0
+#define ANCHOR_B_Z -175.0
+#define ANCHOR_C_X -2061.0
+#define ANCHOR_C_Y 1050.0
+#define ANCHOR_C_Z -175.0
+#define ANCHOR_D_Z 3580.0
 
 #define NUM_AXIS 5 // The axis order: A_AXIS, B_AXIS, C_AXIS, D_AXIS, E_AXIS
 #define DIRS 4
@@ -396,7 +399,7 @@ const bool Z_MAX_ENDSTOP_INVERTING = true; // set to true to invert the logic of
 //===========================================================================
 // If EXPERIMENTAL_LINE_BUILDUP_COMPENSATION_FEATURE is enabled
 // then constant ABCD values are calculated on the fly and used only used to calculate accelerations
-#define DEFAULT_ESTEPS 410.0 // 410.0 set quite at random
+#define DEFAULT_ESTEPS 418.6 // 410.0 set quite at random
 #if defined(EXPERIMENTAL_LINE_BUILDUP_COMPENSATION_FEATURE)
 #define DEFAULT_AXIS_STEPS_PER_UNIT   {0, 0, 0, 0, DEFAULT_ESTEPS}
 #else
