@@ -36,18 +36,16 @@ intersection(){
     left_rounded_cube2([x_w, wedge_st*(max_i+1), h],1,$fn=4*4);
 }
 //beam
-for(i=[0,1])
-  translate([0,(wedge_st*(max_i+1)) + opening - 0.05, i*2*h/3])
-    rotate([0,0,-ang])
-      translate([shorten_beam,0,0])
-        cube([x_w-shorten_beam, wedge_st, h/3]);
+translate([0,(wedge_st*(max_i+1)) + opening - 0.05, 0])
+  rotate([0,0,-ang])
+    translate([shorten_beam,0,0])
+      cube([x_w-shorten_beam, wedge_st, h]);
 // swing
-for(i=[0,1])
-  translate([x_w-connect_l,(opening+wedge_st)/2,i*2*h/3])
-    rotate([0,0,-90])
-      sweep(circle_sector(180-ang, (opening-wedge_st)/2,
-                                   (opening+wedge_st)/2),
-        [translation([0,0,0]),translation([0,0, h/3])]);
+translate([x_w-connect_l,(opening+wedge_st)/2,0])
+  rotate([0,0,-90])
+    sweep(circle_sector(180-ang, (opening-wedge_st)/2,
+                                 (opening+wedge_st)/2),
+      [translation([0,0,0]),translation([0,0, h])]);
 
 // Bends arms outwards, so pressure is distributed over beam flat-sides
 //beam_slider();
